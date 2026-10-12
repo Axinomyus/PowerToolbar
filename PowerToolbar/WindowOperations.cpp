@@ -30,15 +30,72 @@ namespace
         return path;
     }
 
-    void ReportFailure(const wchar_t* operation, DWORD error = GetLastError())
+    void ReportFailure(const wchar_t* operation, DWORD error = GetLastError(), Text hint = Text::PermissionHint)
     {
         const std::wstring diagnostic = std::wstring(L"PowerToolbar: ") + operation + L" failed (" + std::to_wstring(error) + L").\n";
         OutputDebugStringW(diagnostic.c_str());
-        const std::wstring message = std::wstring(Tr(Text::OperationFailed)) + L"\n\n" + Tr(Text::PermissionHint);
+        const std::wstring message = std::wstring(Tr(Text::OperationFailed)) + L"\n\n" + Tr(hint);
         const bool previousMenuState = g_menuOpen;
         g_menuOpen = true;
         MessageBoxW(g_toolbar, message.c_str(), L"PowerToolbar", MB_OK | MB_ICONWARNING);
         g_menuOpen = previousMenuState;
+    }
+
+    DWORD RelaunchExplorer(const std::wstring& path, const std::vector<HANDLE>& processes)
+    {
+        const ULONGLONG deadline = GetTickCount64() + 5000;
+        DWORD failure           = ERROR_SUCCESS;
+        for (HANDLE process : processes)
+        {
+            const ULONGLONG now = GetTickCount64();
+            DWORD timeout      = 0;
+            if (now < deadline)
+            {
+                timeout = static_cast<DWORD>(deadline - now);
+            }
+
+            const DWORD result = WaitForSingleObject(process, timeout);
+            if (result == WAIT_TIMEOUT)
+            {
+                failure = ERROR_TIMEOUT;
+            }
+            else if (result == WAIT_FAILED)
+            {
+                failure = GetLastError();
+            }
+            CloseHandle(process);
+        }
+        if (failure != ERROR_SUCCESS)
+        {
+            return failure;
+        }
+
+        // Windows can restore the shell itself after termination.
+        DWORD shellProcessId = 0;
+        GetWindowThreadProcessId(GetShellWindow(), &shellProcessId);
+        if (shellProcessId != 0)
+        {
+            HANDLE shellProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shellProcessId);
+            if (shellProcess)
+            {
+                const bool restored = _wcsicmp(GetProcessPath(shellProcess).c_str(), path.c_str()) == 0;
+                CloseHandle(shellProcess);
+                if (restored)
+                {
+                    return ERROR_SUCCESS;
+                }
+            }
+        }
+
+        STARTUPINFOW startup         = { sizeof(startup) };
+        PROCESS_INFORMATION process = {};
+        if (!CreateProcessW(path.c_str(), nullptr, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process))
+        {
+            return GetLastError();
+        }
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        return ERROR_SUCCESS;
     }
 
     bool SetStyle(HWND hwnd, LONG_PTR style)
@@ -319,16 +376,23 @@ void KillAllByProcessName(HWND hwnd)
         ReportFailure(L"identify this app");
         return;
     }
-    if (_wcsicmp(name.c_str(), L"explorer.exe") == 0)
+
+    const bool restartExplorer = _wcsicmp(name.c_str(), L"explorer.exe") == 0;
+
+    Text confirmation = Text::EndConfirm;
+    Text title        = Text::EndApp;
+    DWORD access      = PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE;
+    if (restartExplorer)
     {
-        MessageBoxW(g_toolbar, Tr(Text::ExplorerProtected), L"PowerToolbar", MB_OK | MB_ICONINFORMATION);
-        return;
+        confirmation = Text::ExplorerRestartConfirm;
+        title        = Text::RestartExplorer;
+        access      |= SYNCHRONIZE;
     }
 
-    const std::wstring message = name + L"\n\n" + Tr(Text::EndConfirm);
+    const std::wstring message = name + L"\n\n" + Tr(confirmation);
     const bool previousMenuState = g_menuOpen;
     g_menuOpen = true;
-    const int answer = MessageBoxW(g_toolbar, message.c_str(), Tr(Text::EndApp), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+    const int answer = MessageBoxW(g_toolbar, message.c_str(), Tr(title), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
     g_menuOpen = previousMenuState;
     if (answer != IDYES)
     {
@@ -342,6 +406,7 @@ void KillAllByProcessName(HWND hwnd)
         return;
     }
 
+    std::vector<HANDLE> explorerProcesses;
     DWORD failure = ERROR_SUCCESS;
     PROCESSENTRY32W entry = { sizeof(entry) };
     BOOL found = Process32FirstW(snapshot, &entry);
@@ -349,7 +414,7 @@ void KillAllByProcessName(HWND hwnd)
     {
         if (entry.th32ProcessID != GetCurrentProcessId() && _wcsicmp(entry.szExeFile, name.c_str()) == 0)
         {
-            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+            HANDLE process = OpenProcess(access, FALSE, entry.th32ProcessID);
             if (!process)
             {
                 failure = GetLastError();
@@ -362,11 +427,22 @@ void KillAllByProcessName(HWND hwnd)
                 {
                     failure = GetLastError();
                 }
-                else if (_wcsicmp(path.c_str(), targetPath.c_str()) == 0 && !TerminateProcess(process, 1))
+                else if (_wcsicmp(path.c_str(), targetPath.c_str()) == 0)
                 {
-                    failure = GetLastError();
+                    if (!TerminateProcess(process, 1))
+                    {
+                        failure = GetLastError();
+                    }
+                    else if (restartExplorer)
+                    {
+                        explorerProcesses.push_back(process);
+                        process = nullptr;
+                    }
                 }
-                CloseHandle(process);
+                if (process)
+                {
+                    CloseHandle(process);
+                }
             }
         }
         found = Process32NextW(snapshot, &entry);
@@ -376,6 +452,16 @@ void KillAllByProcessName(HWND hwnd)
     if (enumerationError != ERROR_NO_MORE_FILES)
     {
         failure = enumerationError;
+    }
+    if (restartExplorer && (!explorerProcesses.empty() || failure == ERROR_SUCCESS))
+    {
+        // Restore the shell even if another matching process could not be ended.
+        const DWORD restartFailure = RelaunchExplorer(targetPath, explorerProcesses);
+        if (restartFailure != ERROR_SUCCESS)
+        {
+            ReportFailure(L"restart Windows Explorer", restartFailure, Text::ExplorerRestartFailed);
+            return;
+        }
     }
     if (failure != ERROR_SUCCESS)
     {

@@ -3,10 +3,15 @@
 #include "Constants.h"
 #include "Localization.h"
 #include "Audio.h"
+#include "WindowOperations.h"
 #include <algorithm>
 
 std::wstring GetButtonTooltip(int buttonId)
 {
+    if (buttonId == 6 && _wcsicmp(GetProcessNameFromHWND(g_active).c_str(), L"explorer.exe") == 0)
+    {
+        return Tr(Text::RestartExplorer);
+    }
     if (buttonId == 9)
     {
         const auto state = static_cast<AppAudioState>(GetWindowLongPtrW(GetDlgItem(g_toolbar, 9), GWLP_USERDATA));

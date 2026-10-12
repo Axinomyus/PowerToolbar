@@ -20,9 +20,9 @@ enum class Text
     Pin, Center, Fullscreen, Minimize, CloseWindow, EndApp, Audio,
     PinTip, CenterTip, FullscreenTip, MinimizeTip, CloseTip, EndTip, CompactTip, HideTip, AudioTip,
     Enabled, Disabled, AudioHint, FullscreenHint, SaveFailed, OperationFailed, PermissionHint,
-    EndConfirm, ExplorerProtected, NoAudio, AudioFailed, TrayFailed, WebsiteFailed,
+    EndConfirm, ExplorerRestartConfirm, NoAudio, AudioFailed, TrayFailed, WebsiteFailed,
     StartupManaged, InitFailed, Screenshot, ScreenshotTip, ScreenshotFailed, MuteApp, UnmuteApp, ScreenshotHint,
-    RevealToolbar, CollapseToolbar, Count
+    RevealToolbar, CollapseToolbar, RestartExplorer, ExplorerRestartFailed, Count
 };
 
 const wchar_t* Translate(Text text, Language language);

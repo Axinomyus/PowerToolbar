@@ -6,7 +6,7 @@ Everyday Windows controls just above your active window. Built by [Axinomyus](ht
 
 ## Controls
 
-Pin, center, enter fullscreen, minimize or close the selected window. Ending an app requires confirmation and affects processes running the same executable. Windows Explorer is protected from this action.
+Pin, center, enter fullscreen, minimize or close the selected window. Ending an app requires confirmation and affects processes running the same executable. For Windows Explorer, this action restarts it: end its processes, wait for them to exit, then launch explorer.exe again. Its tooltip and confirmation show Restart Windows Explorer; folder windows close and the desktop/taskbar may briefly disappear.
 
 The toolbar normally stays outside the window. It hides for maximized/fullscreen windows and whenever there is insufficient space above a normal window. In a maximized/fullscreen window, pause the pointer at the monitor's top center: a small down arrow appears. Click it to open your toolbar inside the window; click the up arrow or move away to collapse it. The window is never resized to make room. You can also use **Leave window fullscreen** in the tray menu to restore a window made fullscreen by PowerToolbar.
 
@@ -47,7 +47,7 @@ The application uses the static C++ runtime and needs no Python or other third-p
 
 This repository contains the application source, Visual Studio solution, application/tray icons, license, and only the images referenced in this README. Installer recipes, built executables, test harnesses, internal documentation and Store/website publication assets are maintained separately.
 
-Version **1.1.0** is prepared for distribution through [GitHub Releases](https://github.com/Axinomyus/windows-toolbar/releases). The installer and portable ZIP are unsigned; Windows may display an unknown-publisher or SmartScreen warning. Locally prepared packages are not necessarily published there yet. Installers and portable packages are maintained outside the source tree.
+Version **1.2.0** is prepared for distribution through [GitHub Releases](https://github.com/Axinomyus/windows-toolbar/releases). The installer and portable ZIP are unsigned; Windows may display an unknown-publisher or SmartScreen warning. Locally prepared packages are not necessarily published there yet. Installers and portable packages are maintained outside the source tree.
 
 The local desktop checks cover hide/restore, fullscreen reveal, window targeting, translations, saved settings, app audio isolation and mute icons, client-area PNG capture, startup registration and resource stability. Installation, upgrade and uninstall have not been executed for this build; it is prepared as a pre-release. Actual Windows restart/login, clean-machine installation and physical mixed-DPI monitors require separate validation.
 
